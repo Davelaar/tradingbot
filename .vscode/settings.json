@@ -1,0 +1,12 @@
+{
+  "telemetry.telemetryLevel": "off",
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "filebrowser/bundles/**": true,
+    "secrets/**": false
+  },
+  "python.defaultInterpreterPath": "/srv/trading/.venv/bin/python",
+  "python.analysis.autoImportCompletions": true,
+  "editor.formatOnSave": true
+}

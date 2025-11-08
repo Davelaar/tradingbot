@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "ms-azuretools.vscode-docker",
+    "redhat.vscode-yaml",
+    "tamasfe.even-better-toml",
+    "eamodio.gitlens",
+    "ms-vscode.makefile-tools",
+    "ms-azuretools.vscode-docker"
+  ]
+}
