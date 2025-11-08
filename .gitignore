@@ -11,3 +11,4 @@ secrets/
 /srv/trading/storage/
 /srv/trading/logs/
 /srv/trading/secrets/
+filebrowser/bundles/
