@@ -12,3 +12,8 @@ secrets/
 /srv/trading/logs/
 /srv/trading/secrets/
 filebrowser/bundles/
+
+# backups for local edits
+Makefile.bak.*
+tools/order_submit_bitvavo.py.bak*
+*.bak
