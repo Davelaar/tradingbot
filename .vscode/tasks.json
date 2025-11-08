@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "logs: core",    "type": "shell", "command": "make logs-core",   "problemMatcher": [] },
+    { "label": "logs: submit",  "type": "shell", "command": "make logs-submit", "problemMatcher": [] },
+    { "label": "redis: scan",   "type": "shell", "command": "make redis-scan",  "problemMatcher": [] },
+    { "label": "inject: dry",   "type": "shell", "command": "make inject-dry",  "problemMatcher": [] },
+    { "label": "auth: check",   "type": "shell", "command": "make auth-check",  "problemMatcher": [] }
+  ]
+}
