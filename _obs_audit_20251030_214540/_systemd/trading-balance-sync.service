@@ -1,0 +1,18 @@
+[Unit]
+Description=Trading - Balance Sync (Bitvavo -> Redis)
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.trading
+WorkingDirectory=/srv/trading
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/tools/balance_sync_bitvavo.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

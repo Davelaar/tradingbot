@@ -1,0 +1,22 @@
+[Unit]
+Description=Trading Core (dry-run -> live)
+After=network-online.target redis.service docker.service
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.trading
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/trading_core.py
+WorkingDirectory=/srv/trading
+Restart=on-failure
+RestartSec=2
+Nice=5
+StandardOutput=journal
+StandardError=journal
+# Hard stop in 10s bij kill
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

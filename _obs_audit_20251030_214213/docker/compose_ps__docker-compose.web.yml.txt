@@ -1,0 +1,4 @@
+$ docker compose -f /srv/trading/compose/docker-compose.web.yml ps
+NAME                     IMAGE                            COMMAND                  SERVICE       CREATED        STATUS                    PORTS
+webstack-caddy-1         caddy:2.10.2                     "caddy run --config …"   caddy         33 hours ago   Up 33 hours               0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp
+webstack-filebrowser-1   filebrowser/filebrowser:latest   "tini -- /init.sh -a…"   filebrowser   32 hours ago   Up 32 hours (unhealthy)   80/tcp

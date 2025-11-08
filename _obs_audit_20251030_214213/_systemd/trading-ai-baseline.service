@@ -1,0 +1,23 @@
+[Unit]
+Description=Trading AI Baseline (signals:baseline)
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.ai
+WorkingDirectory=/srv/trading
+# DeprecationWarning dempen + venv Python gebruiken
+ExecStart=/srv/trading/.venv/bin/python -W ignore::DeprecationWarning /srv/trading/ai/baseline_signals.py
+Restart=always
+RestartSec=2
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

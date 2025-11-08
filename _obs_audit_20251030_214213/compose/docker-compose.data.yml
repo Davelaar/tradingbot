@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: datastack-redis-1
+    restart: unless-stopped
+    command: [
+      "redis-server",
+      "--appendonly", "yes",
+      "--maxmemory", "8gb",
+      "--maxmemory-policy", "allkeys-lru",
+      "--save", "900", "1",
+      "--save", "300", "10",
+      "--save", "60", "10000"
+    ]
+    ports:
+      - "6379:6379"
+    volumes:
+      - /srv/trading/storage/redis:/data
+    networks:
+      - metricsnet
+      - obsnet
+
+networks:
+  metricsnet:
+    external: true
+  obsnet:
+    external: true

@@ -1,0 +1,4 @@
+- labels:
+    job: guard-mux
+  targets:
+    - 127.0.0.1:9120

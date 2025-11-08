@@ -1,0 +1,30 @@
+[Unit]
+Description=Bitvavo ingest - candles (1m/5m) via WS met RL (conservatief)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.bitvavo
+
+# Belangrijk: GEEN API-key gebruiken voor candles → minder ban-risico
+Environment=BITVAVO_API_KEY=
+Environment=BITVAVO_API_SECRET=
+
+# Rustiger subscribe-cadence
+Environment=CANDLE_INTERVALS=1m,5m
+Environment=CANDLE_LIMIT=200
+Environment=SUB_CHUNK=30
+Environment=SLEEP_BETWEEN_SUBS=0.10
+Environment=SLEEP_BETWEEN_CHUNKS=2.0
+Environment=RATE_MIN=400
+
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/ingest_candles_rl.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

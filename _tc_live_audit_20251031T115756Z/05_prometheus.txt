@@ -1,0 +1,96 @@
+== /etc/prometheus/prometheus.yml (in container) ==
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node_exporter:9100']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Drie app-targets op obsnet (dummy of real metrics endpoints)
+  - job_name: 'trading_core'
+    static_configs:
+      - targets:
+          - 'trading_core:9101'
+          - 'ingest:9102'
+          - 'ai_baseline:9103'
+
+  # Redis exporter via servicenaam op hetzelfde netwerk
+  - job_name: 'redis_exporter'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+
+  # (optioneel) metrics shim – als je die draait
+  - job_name: 'metrics_shim'
+    static_configs:
+      - targets: ['metrics_shim:9409']
+
+== Targets overzicht ==
+{
+  "job": "cadvisor",
+  "instance": "cadvisor:8080",
+  "health": "up"
+}
+{
+  "job": "metrics_shim",
+  "instance": "metrics_shim:9409",
+  "health": "down"
+}
+{
+  "job": "node_exporter",
+  "instance": "node_exporter:9100",
+  "health": "up"
+}
+{
+  "job": "prometheus",
+  "instance": "prometheus:9090",
+  "health": "up"
+}
+{
+  "job": "redis_exporter",
+  "instance": "redis_exporter:9121",
+  "health": "up"
+}
+{
+  "job": "trading_core",
+  "instance": "trading_core:9101",
+  "health": "up"
+}
+{
+  "job": "trading_core",
+  "instance": "ingest:9102",
+  "health": "up"
+}
+{
+  "job": "trading_core",
+  "instance": "ai_baseline:9103",
+  "health": "up"
+}
+
+== Label jobs ==
+{
+  "status": "success",
+  "data": [
+    "cadvisor",
+    "metrics_shim",
+    "node_exporter",
+    "prometheus",
+    "redis_exporter",
+    "trading_core"
+  ]
+}
+
+== UP voor trading_core job ==
+
+== Metrics reachability vanaf Prometheus (GET /metrics) ==
+>>> trading_core:9101
+>>> ingest:9102
+>>> ai_baseline:9103

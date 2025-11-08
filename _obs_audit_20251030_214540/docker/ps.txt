@@ -1,0 +1,9 @@
+CONTAINER ID   NAMES                            IMAGE                             STATUS                    PORTS
+c41f47087019   observability-redis_exporter-1   oliver006/redis_exporter:latest   Up 6 hours                9121/tcp
+a94c264dcab3   datastack-redis-1                redis:7.4-alpine                  Up 6 hours                0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+5baf78f2514e   observability-prometheus-1       prom/prometheus:latest            Up 6 hours                0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+7aa9a6fd7874   observability-cadvisor-1         gcr.io/cadvisor/cadvisor:latest   Up 7 hours (healthy)      8080/tcp
+7567404074cd   observability-grafana-1          grafana/grafana:latest            Up 7 hours                0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+dd917bddf509   observability-node_exporter-1    prom/node-exporter:latest         Up 7 hours                9100/tcp
+4d1508df83bc   webstack-filebrowser-1           filebrowser/filebrowser:latest    Up 32 hours (unhealthy)   80/tcp
+90dcd155e4d8   webstack-caddy-1                 caddy:2.10.2                      Up 33 hours               0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp

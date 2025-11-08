@@ -1,0 +1,44 @@
+# Observability Audit Inventory — 20251030_214540
+
+## Compose-bestanden:
+- /srv/trading/_obs_audit_20251030_214540/compose/prometheus.yml.bak.1761837784
+- /srv/trading/_obs_audit_20251030_214540/compose/.env.web
+- /srv/trading/_obs_audit_20251030_214540/compose/prometheus.yml
+- /srv/trading/_obs_audit_20251030_214540/compose/prometheus.yml.bak.1761836332
+- /srv/trading/_obs_audit_20251030_214540/compose/docker-compose.data.yml
+- /srv/trading/_obs_audit_20251030_214540/compose/docker-compose.web.yml
+- /srv/trading/_obs_audit_20251030_214540/compose/docker-compose.obs.yml
+
+## Prometheus configuratie:
+- compose/prometheus.yml (aanwezig)
+
+## Weblaag configs:
+- /srv/trading/_obs_audit_20251030_214540/web/Caddyfile
+
+## Services (tradingbot):
+
+## Metrics scripts:
+- /srv/trading/_obs_audit_20251030_214540/metrics/trading_core_metrics.py
+- /srv/trading/_obs_audit_20251030_214540/metrics/ai_baseline_metrics.py
+- /srv/trading/_obs_audit_20251030_214540/metrics/ingest_metrics.py
+
+## Systemd units:
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-core.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-ai-baseline.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-balance-sync.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-backfill.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-sim.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-metrics.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-ingest-candles.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-submit.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-ai-bandit.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-ingest-orderbook.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-fees-sync.service
+- /srv/trading/_obs_audit_20251030_214540/_systemd/trading-ingest-tickertrades.service
+
+## .env (geredigeerd):
+- /srv/trading/_obs_audit_20251030_214540/env/bitvavo.env
+- /srv/trading/_obs_audit_20251030_214540/env/.env
+- /srv/trading/_obs_audit_20251030_214540/env/.env.ai
+- /srv/trading/_obs_audit_20251030_214540/env/.env.bitvavo
+- /srv/trading/_obs_audit_20251030_214540/env/.env.trading

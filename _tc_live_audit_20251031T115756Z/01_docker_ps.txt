@@ -1,0 +1,29 @@
+== DOCKER PS ==
+NAMES                           IMAGE                             STATUS                          PORTS
+ingest                          python:3.12-slim                  Up 13 hours (healthy)           
+trading_core                    python:3.12-slim                  Up 13 hours (healthy)           
+ai_baseline                     python:3.12-slim                  Up 13 hours (healthy)           
+metrics_shim                    python:3.12-slim                  Restarting (0) 49 seconds ago   
+redis_exporter                  oliver006/redis_exporter:latest   Up 14 hours                     9121/tcp
+observability-grafana-1         grafana/grafana:latest            Up 14 hours                     0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+datastack-redis-1               redis:7.4-alpine                  Up 21 hours                     0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+observability-prometheus-1      prom/prometheus:latest            Up 21 hours                     0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+observability-cadvisor-1        gcr.io/cadvisor/cadvisor:latest   Up 22 hours (healthy)           8080/tcp
+observability-node_exporter-1   prom/node-exporter:latest         Up 22 hours                     9100/tcp
+webstack-filebrowser-1          filebrowser/filebrowser:latest    Up 46 hours (unhealthy)         80/tcp
+webstack-caddy-1                caddy:2.10.2                      Up 47 hours                     0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp
+
+== docker-compose.core.yml ps (indien aanwezig) ==
+NAME           IMAGE              COMMAND                  SERVICE        CREATED        STATUS                          PORTS
+ai_baseline    python:3.12-slim   "sh -lc 'pip install…"   ai_baseline    13 hours ago   Up 13 hours (healthy)           
+ingest         python:3.12-slim   "sh -lc 'pip install…"   ingest         13 hours ago   Up 13 hours (healthy)           
+metrics_shim   python:3.12-slim   "sh -lc 'pip install…"   metrics_shim   13 hours ago   Restarting (0) 49 seconds ago   
+trading_core   python:3.12-slim   "sh -lc 'pip install…"   trading_core   13 hours ago   Up 13 hours (healthy)           
+
+== docker-compose.obs.yml ps (indien aanwezig) ==
+NAME                            IMAGE                             COMMAND                  SERVICE          CREATED        STATUS                  PORTS
+observability-cadvisor-1        gcr.io/cadvisor/cadvisor:latest   "/usr/bin/cadvisor -…"   cadvisor         22 hours ago   Up 22 hours (healthy)   8080/tcp
+observability-grafana-1         grafana/grafana:latest            "/run.sh"                grafana          14 hours ago   Up 14 hours             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+observability-node_exporter-1   prom/node-exporter:latest         "/bin/node_exporter"     node_exporter    22 hours ago   Up 22 hours             9100/tcp
+observability-prometheus-1      prom/prometheus:latest            "/bin/prometheus --c…"   prometheus       22 hours ago   Up 21 hours             0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+redis_exporter                  oliver006/redis_exporter:latest   "/redis_exporter"        redis_exporter   14 hours ago   Up 14 hours             9121/tcp

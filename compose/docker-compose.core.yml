@@ -1,0 +1,54 @@
+name: corestack
+services:
+  trading_core:
+    image: python:3.12-slim
+    container_name: trading_core
+    restart: unless-stopped
+    volumes:
+      - /srv/trading/metrics:/app:ro
+    command: >
+      sh -lc "pip install --no-cache-dir prometheus_client &&
+              python /app/trading_core_metrics.py"
+    networks: [obsnet]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/metrics').read(); print('OK')\nPY"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+
+  ingest:
+    image: python:3.12-slim
+    container_name: ingest
+    restart: unless-stopped
+    volumes:
+      - /srv/trading/metrics:/app:ro
+    command: >
+      sh -lc "pip install --no-cache-dir prometheus_client &&
+              python /app/ingest_metrics.py"
+    networks: [obsnet]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:9102/metrics').read(); print('OK')\nPY"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+
+  ai_baseline:
+    image: python:3.12-slim
+    container_name: ai_baseline
+    restart: unless-stopped
+    volumes:
+      - /srv/trading/metrics:/app:ro
+    command: >
+      sh -lc "pip install --no-cache-dir prometheus_client &&
+              python /app/ai_baseline_metrics.py"
+    networks: [obsnet]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:9103/metrics').read(); print('OK')\nPY"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+
+networks:
+  obsnet:
+    external: true
+    name: obsnet

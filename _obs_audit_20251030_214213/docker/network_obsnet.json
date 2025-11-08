@@ -1,0 +1,39 @@
+[
+    {
+        "Name": "obsnet",
+        "Id": "ef54a6327d5e1e1eef89578a9f9e6872f68624ba69068b6f386b860616e00922",
+        "Created": "2025-10-30T15:14:43.330210424Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.23.0.0/16",
+                    "Gateway": "172.23.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "a94c264dcab3ca95d779dc0bfd33f15211953ae851b9e9a321be1a3a9069fa2f": {
+                "Name": "datastack-redis-1",
+                "EndpointID": "7b1f21593ec3237bff8dbb51e0217bb8f80f5b223e06111e76e25f147b940467",
+                "MacAddress": "f6:05:9b:aa:a5:ab",
+                "IPv4Address": "172.23.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {}
+    }
+]

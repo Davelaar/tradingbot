@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import os, json, time, decimal, logging, signal, sys
+from typing import Dict, Any, Optional
+from redis import Redis
+from redis.exceptions import ResponseError
+from python_bitvavo_api.bitvavo import Bitvavo
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+D = decimal.Decimal
+
+REDIS_URL    = os.getenv("REDIS_URL",  "redis://127.0.0.1:6379/0")
+ORDER_STREAM = os.getenv("ORDER_STREAM", "orders:live")
+EXEC_STREAM  = os.getenv("EXEC_STREAM",  "orders:executed")
+GROUP        = os.getenv("GROUP",        "trading_submitter")
+CONSUMER     = os.getenv("CONSUMER",     "submitter-1")
+DRY          = os.getenv("DRY", "1") not in ("0","false","False")
+
+API_KEY = os.getenv("BITVAVO_API_KEY", "")
+API_SEC = os.getenv("BITVAVO_API_SECRET", "")
+
+stop = False
+def _stop(*_a):  # graceful stop
+    global stop
+    stop = True
+
+for sig in (signal.SIGINT, signal.SIGTERM):
+    signal.signal(sig, _stop)
+
+def ensure_group(r: Redis):
+    try:
+        r.xgroup_create(name=ORDER_STREAM, groupname=GROUP, id="0-0", mkstream=True)
+        logging.info("XGROUP CREATE %s %s", ORDER_STREAM, GROUP)
+    except ResponseError as e:
+        if "BUSYGROUP" in str(e) or "exists" in str(e):
+            pass
+        else:
+            raise
+
+def parse_core_payload(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Core schrijft 1 veld 'data' met JSON-string.
+    Verwacht bijv.:
+      {"ts":"...","dry_run":"false","action":"OPEN","signal_id":"...","market":"HONEY-EUR","side":"buy","price":"1.23000000","size_eur":"0.00","mode":"percent","tp_pct":"2.0000","sl_pct":"1.0000","trail_pct":"0.0000"}
+    """
+    if "data" in fields:
+        data = fields["data"]
+        if isinstance(data, bytes):
+            data = data.decode()
+        p = json.loads(data)
+    else:
+        # fallback: direct velden
+        p = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in fields.items()}
+
+    # basis-normalisatie
+    p["dry_run"] = str(p.get("dry_run","true")).lower() == "true"
+    p["action"]  = p.get("action","OPEN").upper()
+    p["market"]  = p.get("market")
+    p["side"]    = p.get("side","buy").lower()
+    # prijs kan "0.00000000" zijn (market)
+    price = p.get("price")
+    try:
+        p["price"] = None if (price is None or D(price)==0) else f"{D(price):f}"
+    except Exception:
+        p["price"] = None
+    # amount bepalen uit size_eur of amount
+    amt = p.get("amount")
+    if not amt:
+        # size_eur niet bruikbaar → laat Bitvavo amount berekenen buiten scope; zet 0 voor DRY
+        sz = p.get("size_eur","0.00")
+        try:
+            p["amount"] = "0.000000" if D(sz) == 0 else "0.000000"
+        except Exception:
+            p["amount"] = "0.000000"
+    else:
+        p["amount"] = str(amt)
+
+    # orderType
+    p["orderType"] = "market" if p["price"] in (None, "", "0", "0.0") else "limit"
+    return p
+
+def emit_executed(r: Redis, mid: str, status: str, obj: Dict[str, Any]):
+    payload = {
+        "status": status,
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "mid": mid,
+        "order": json.dumps(obj),
+    }
+    r.xadd(EXEC_STREAM, payload, id="*")
+
+def place_live(bitvavo: Bitvavo, p: Dict[str, Any]) -> Dict[str, Any]:
+    order = {
+        "market": p["market"],
+        "side": p["side"],
+        "orderType": p["orderType"],
+    }
+    if p["orderType"] == "limit":
+        order["price"] = p["price"]
+        order["amount"] = p["amount"]
+    else:
+        # market: minimaal amount (kan later uitgebreid met notional->amount)
+        order["amount"] = p["amount"]
+
+    resp = bitvavo.placeOrder(p["market"], p["side"], order["orderType"], order)
+    return {"request": order, "response": resp}
+
+def main():
+    r = Redis.from_url(REDIS_URL, decode_responses=True)
+    ensure_group(r)
+
+    live = (not DRY) and API_KEY and API_SEC
+    if live:
+        bv = Bitvavo({"APIKEY": API_KEY, "APISECRET": API_SEC})
+        try:
+            _ = bv.balance({})  # rooktest credentials
+            logging.info("Submitter gestart | stream=%s group=%s consumer=%s live=True", ORDER_STREAM, GROUP, CONSUMER)
+        except Exception as e:
+            logging.warning("Bitvavo auth faalde: %s — val terug op DRY", str(e)[:200])
+            live = False
+            logging.info("Submitter gestart | stream=%s group=%s consumer=%s live=False", ORDER_STREAM, GROUP, CONSUMER)
+    else:
+        logging.info("Submitter gestart | stream=%s group=%s consumer=%s live=False", ORDER_STREAM, GROUP, CONSUMER)
+
+    # Blokkerende lees-loop (blijft draaien, geen stille exit)
+    while not stop:
+        try:
+            resp = r.xreadgroup(GROUP, CONSUMER, {ORDER_STREAM: ">"}, count=10, block=30000)
+            if not resp:
+                continue
+            # resp: [(stream, [(id, {fields}), ...])]
+            _, items = resp[0]
+            for mid, fields in items:
+                try:
+                    p = parse_core_payload(fields)
+                    if p.get("action") != "OPEN" or not p.get("market"):
+                        emit_executed(r, mid, "IGNORED", {"reason": "unsupported_action_or_missing_market", "src": "core_outbox_v2"})
+                        r.xack(ORDER_STREAM, GROUP, mid)
+                        continue
+
+                    if live:
+                        res = place_live(bv, p)
+                        emit_executed(r, mid, "LIVE_OK", res)
+                    else:
+                        fake = {
+                            "market": p.get("market"),
+                            "side": p.get("side"),
+                            "orderType": p.get("orderType"),
+                            "amount": p.get("amount"),
+                            "price": p.get("price"),
+                            "src": "core_outbox_v2"
+                        }
+                        emit_executed(r, mid, "DRY_OK", fake)
+                    r.xack(ORDER_STREAM, GROUP, mid)
+                except Exception as e:
+                    logging.error("ORDER EXC id=%s payload=%s err=%s", mid, json.dumps(fields)[:500], repr(e))
+                    # niet ack-en, blijft pending
+        except ResponseError as e:
+            if "NOGROUP" in str(e):
+                ensure_group(r); time.sleep(1); continue
+            raise
+        except Exception as e:
+            logging.error("LOOP EXC %s", repr(e))
+            time.sleep(2)
+
+if __name__ == "__main__":
+    main()

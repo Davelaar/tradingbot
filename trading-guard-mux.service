@@ -1,0 +1,22 @@
+[Unit]
+Description=Trading - Guard Metrics MUX (all guards -> :9120)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/srv/trading
+ExecStart=/usr/bin/python3 /srv/trading/tools/guard_mux_exporter.py
+Restart=always
+RestartSec=2
+MemoryMax=200M
+MemorySwapMax=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

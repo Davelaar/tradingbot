@@ -1,0 +1,6 @@
+== SUMMARY ==
+OUTDIR: /srv/trading/_tc_live_audit_20251031T115756Z
+Submitter unit: /etc/systemd/system/trading-submit.service
+Submitter script: /srv/trading/tools/order_submit_bitvavo.py
+.env.trading present? yes
+bitvavo.env present? yes

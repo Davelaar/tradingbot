@@ -1,0 +1,19 @@
+[Unit]
+Description=Trading - Order Submitter (orders:live -> Bitvavo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.trading
+EnvironmentFile=/srv/trading/secrets/bitvavo.env
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/tools/order_submit_bitvavo.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

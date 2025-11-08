@@ -1,0 +1,24 @@
+[Unit]
+Description=Bitvavo ingest - orderbook (incremental + snapshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.bitvavo
+# Tuning — pas gerust aan:
+Environment=ORDERBOOK_DEPTH=100
+Environment=SUB_CHUNK=25
+Environment=SLEEP_BETWEEN_SUBS=0.05
+Environment=SLEEP_BETWEEN_CHUNKS=1.0
+Environment=RATE_MIN=200
+Environment=DRAIN_GRACE_MS=250
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/ingest_orderbook.py
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

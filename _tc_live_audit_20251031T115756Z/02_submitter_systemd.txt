@@ -1,0 +1,107 @@
+== trading-submit.service status (kort) ==
+● trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo)
+     Loaded: loaded (/etc/systemd/system/trading-submit.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2025-10-31 12:25:54 CET; 32min ago
+   Main PID: 2400567 (python)
+      Tasks: 1 (limit: 38414)
+     Memory: 20.5M (peak: 20.7M)
+        CPU: 255ms
+     CGroup: /system.slice/trading-submit.service
+             └─2400567 /srv/trading/.venv/bin/python /srv/trading/tools/order_submit_bitvavo.py
+
+Oct 31 12:25:54 ubuntu systemd[1]: Started trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo).
+Oct 31 12:25:54 ubuntu python[2400567]: 2025-10-31 12:25:54,500 INFO Submitter gestart | stream=orders:live group=trading_submitter consumer=submitter-1 live=True
+
+== trading-submit.service unitfile (pad / inhoud) ==
+/etc/systemd/system/trading-submit.service
+[Unit]
+Description=Trading - Order Submitter (orders:live -> Bitvavo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.trading
+EnvironmentFile=/srv/trading/secrets/bitvavo.env
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/tools/order_submit_bitvavo.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
+== Laatste 60 logregels submitter ==
+Oct 31 10:57:53 ubuntu python3[2299616]:            ^^^^
+Oct 31 10:57:53 ubuntu python3[2299616]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 669, in <lambda>
+Oct 31 10:57:53 ubuntu python3[2299616]:     lambda: self._send_command_parse_response(
+Oct 31 10:57:53 ubuntu python3[2299616]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 10:57:53 ubuntu python3[2299616]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 640, in _send_command_parse_response
+Oct 31 10:57:53 ubuntu python3[2299616]:     return self.parse_response(conn, command_name, **options)
+Oct 31 10:57:53 ubuntu python3[2299616]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 10:57:53 ubuntu python3[2299616]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 691, in parse_response
+Oct 31 10:57:53 ubuntu python3[2299616]:     response = connection.read_response()
+Oct 31 10:57:53 ubuntu python3[2299616]:                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 10:57:53 ubuntu python3[2299616]:   File "/usr/local/lib/python3.12/dist-packages/redis/connection.py", line 1155, in read_response
+Oct 31 10:57:53 ubuntu python3[2299616]:     raise response
+Oct 31 10:57:53 ubuntu python3[2299616]: redis.exceptions.ResponseError: NOGROUP No such key 'orders:live' or consumer group 'trading_submitter' in XREADGROUP with GROUP option
+Oct 31 10:57:53 ubuntu systemd[1]: trading-submit.service: Main process exited, code=exited, status=1/FAILURE
+Oct 31 10:57:53 ubuntu systemd[1]: trading-submit.service: Failed with result 'exit-code'.
+Oct 31 10:57:56 ubuntu systemd[1]: trading-submit.service: Scheduled restart job, restart counter is at 57.
+Oct 31 10:57:56 ubuntu systemd[1]: Started trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo).
+Oct 31 10:57:56 ubuntu python3[2299738]: 2025-10-31 10:57:56,969 INFO XGROUP CREATE orders:live trading_submitter
+Oct 31 10:57:56 ubuntu python3[2299738]: 2025-10-31 10:57:56,970 INFO Submitter gestart | stream=orders:live group=trading_submitter consumer=submitter-1 live=False
+Oct 31 11:05:22 ubuntu python3[2299738]: Traceback (most recent call last):
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/srv/trading/tools/order_submit_bitvavo.py", line 99, in <module>
+Oct 31 11:05:22 ubuntu python3[2299738]:     main()
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/srv/trading/tools/order_submit_bitvavo.py", line 81, in main
+Oct 31 11:05:22 ubuntu python3[2299738]:     resp = r.xreadgroup(GROUP, CONSUMER, {ORDER_STREAM: ">"}, count=10, block=5000)
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/commands/core.py", line 4053, in xreadgroup
+Oct 31 11:05:22 ubuntu python3[2299738]:     return self.execute_command("XREADGROUP", *pieces)
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 657, in execute_command
+Oct 31 11:05:22 ubuntu python3[2299738]:     return self._execute_command(*args, **options)
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 668, in _execute_command
+Oct 31 11:05:22 ubuntu python3[2299738]:     return conn.retry.call_with_retry(
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/retry.py", line 116, in call_with_retry
+Oct 31 11:05:22 ubuntu python3[2299738]:     return do()
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 669, in <lambda>
+Oct 31 11:05:22 ubuntu python3[2299738]:     lambda: self._send_command_parse_response(
+Oct 31 11:05:22 ubuntu python3[2299738]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 640, in _send_command_parse_response
+Oct 31 11:05:22 ubuntu python3[2299738]:     return self.parse_response(conn, command_name, **options)
+Oct 31 11:05:22 ubuntu python3[2299738]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/client.py", line 691, in parse_response
+Oct 31 11:05:22 ubuntu python3[2299738]:     response = connection.read_response()
+Oct 31 11:05:22 ubuntu python3[2299738]:                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+Oct 31 11:05:22 ubuntu python3[2299738]:   File "/usr/local/lib/python3.12/dist-packages/redis/connection.py", line 1155, in read_response
+Oct 31 11:05:22 ubuntu python3[2299738]:     raise response
+Oct 31 11:05:22 ubuntu python3[2299738]: redis.exceptions.ResponseError: NOGROUP No such key 'orders:live' or consumer group 'trading_submitter' in XREADGROUP with GROUP option
+Oct 31 11:05:22 ubuntu systemd[1]: trading-submit.service: Main process exited, code=exited, status=1/FAILURE
+Oct 31 11:05:22 ubuntu systemd[1]: trading-submit.service: Failed with result 'exit-code'.
+Oct 31 11:05:25 ubuntu systemd[1]: trading-submit.service: Scheduled restart job, restart counter is at 58.
+Oct 31 11:05:25 ubuntu systemd[1]: Started trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo).
+Oct 31 11:05:25 ubuntu python3[2308235]: 2025-10-31 11:05:25,697 INFO XGROUP CREATE orders:live trading_submitter
+Oct 31 11:05:25 ubuntu python3[2308235]: 2025-10-31 11:05:25,697 INFO Submitter gestart | stream=orders:live group=trading_submitter consumer=submitter-1 live=False
+Oct 31 12:25:54 ubuntu systemd[1]: Stopping trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo)...
+Oct 31 12:25:54 ubuntu systemd[1]: trading-submit.service: Deactivated successfully.
+Oct 31 12:25:54 ubuntu systemd[1]: Stopped trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo).
+Oct 31 12:25:54 ubuntu systemd[1]: Started trading-submit.service - Trading - Order Submitter (orders:live -> Bitvavo).
+Oct 31 12:25:54 ubuntu python[2400567]: 2025-10-31 12:25:54,500 INFO Submitter gestart | stream=orders:live group=trading_submitter consumer=submitter-1 live=True
+
+== Venv Python + packages (redis/bitvavo) ==
+Python 3.12.3
+/srv/trading/.venv/bin/python
+True
+True
+
+== Submitter-script fingerprint (bestaat/size/sha256) ==
+-rw-r--r-- 1 root root 3533 Oct 30 23:17 /srv/trading/tools/order_submit_bitvavo.py
+9948e07e8d3f3e94896e3e674698809fb286887c954aa452fd8c476eac87838b  /srv/trading/tools/order_submit_bitvavo.py

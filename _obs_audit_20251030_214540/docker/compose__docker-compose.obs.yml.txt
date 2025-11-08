@@ -1,0 +1,102 @@
+$ docker compose -f /srv/trading/compose/docker-compose.obs.yml ps
+NAME                             IMAGE                             COMMAND                  SERVICE          CREATED       STATUS                 PORTS
+observability-cadvisor-1         gcr.io/cadvisor/cadvisor:latest   "/usr/bin/cadvisor -…"   cadvisor         7 hours ago   Up 7 hours (healthy)   8080/tcp
+observability-grafana-1          grafana/grafana:latest            "/run.sh"                grafana          7 hours ago   Up 7 hours             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+observability-node_exporter-1    prom/node-exporter:latest         "/bin/node_exporter"     node_exporter    7 hours ago   Up 7 hours             9100/tcp
+observability-prometheus-1       prom/prometheus:latest            "/bin/prometheus --c…"   prometheus       7 hours ago   Up 6 hours             0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+observability-redis_exporter-1   oliver006/redis_exporter:latest   "/redis_exporter"        redis_exporter   6 hours ago   Up 6 hours             9121/tcp
+
+$ docker compose -f /srv/trading/compose/docker-compose.obs.yml config
+name: observability
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    networks:
+      obsnet: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /
+        target: /rootfs
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /var/run
+        target: /var/run
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /var/lib/docker/
+        target: /var/lib/docker
+        read_only: true
+        bind:
+          create_host_path: true
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ChangeMe-Strong-123!
+      GF_SECURITY_ADMIN_USER: admin
+    image: grafana/grafana:latest
+    networks:
+      obsnet: null
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "3000"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /srv/trading/storage/grafana
+        target: /var/lib/grafana
+        bind:
+          create_host_path: true
+  node_exporter:
+    image: prom/node-exporter:latest
+    networks:
+      obsnet: null
+    restart: unless-stopped
+  prometheus:
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    image: prom/prometheus:latest
+    networks:
+      obsnet: null
+    ports:
+      - mode: ingress
+        target: 9090
+        published: "9090"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /srv/trading/storage/prometheus
+        target: /prometheus
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /srv/trading/compose/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        bind:
+          create_host_path: true
+  redis_exporter:
+    environment:
+      REDIS_ADDR: redis://datastack-redis-1:6379
+    extra_hosts:
+      - host.docker.internal=host-gateway
+    image: oliver006/redis_exporter:latest
+    networks:
+      obsnet: null
+    restart: unless-stopped
+networks:
+  obsnet:
+    name: observability_obsnet

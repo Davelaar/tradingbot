@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+import os, json, time, logging, sys
+from typing import Dict, Any
+import redis
+
+REDIS_URL      = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+ORDER_STREAM   = os.getenv("ORDER_OUTBOX_STREAM", "orders:live")
+ORDER_EXEC     = os.getenv("ORDER_EXEC_STREAM",  "orders:executed")
+GROUP          = os.getenv("CONSUMER_GROUP", "trading_submitter")
+CONSUMER       = os.getenv("CONSUMER_NAME", "submitter-1")
+ENABLE_LIVE    = os.getenv("ENABLE_LIVE", "false").lower() == "true"
+
+API_KEY    = os.getenv("BITVAVO_API_KEY")
+API_SECRET = os.getenv("BITVAVO_API_SECRET")
+OPID       = os.getenv("BITVAVO_OPERATOR_ID") or os.getenv("OPERATOR_ID") or os.getenv("operatorId")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("submitter")
+
+try:
+    from python_bitvavo_api.bitvavo import Bitvavo
+    bv = Bitvavo({
+        "APIKEY": API_KEY or "",
+        "APISECRET": API_SECRET or "",
+        "RESTURL": os.getenv("BITVAVO_REST_URL", "https://api.bitvavo.com/v2"),
+        "WSURL": os.getenv("BITVAVO_WS_URL", "wss://ws.bitvavo.com/v2"),
+        "ACCESSWINDOW": int(os.getenv("BITVAVO_ACCESSWINDOW", "10000")),
+    })
+except Exception as e:
+    log.error("Bitvavo init fail: %s", e)
+    sys.exit(1)
+
+def ensure_group(r: redis.Redis) -> None:
+    try:
+        r.xgroup_create(name=ORDER_STREAM, groupname=GROUP, id="0-0", mkstream=True)
+        log.info("XGROUP CREATE %s %s", ORDER_STREAM, GROUP)
+    except redis.exceptions.ResponseError as e:
+        if "BUSYGROUP" not in str(e): raise
+
+def build_options(payload: Dict[str,str]) -> Dict[str, Any]:
+    opts: Dict[str, Any] = {}
+    if "spend_eur" in payload: opts["amountQuote"] = str(payload["spend_eur"])
+    if "amount"    in payload: opts["amount"]      = str(payload["amount"])
+    if OPID: opts["operatorId"] = OPID
+    return opts
+
+def place(payload: Dict[str,str]) -> Dict[str, Any]:
+    market = payload["market"]; side = payload["side"]; orderType = payload["orderType"]
+    options = build_options(payload)
+    if not ENABLE_LIVE:
+        log.info("ORDER DRY id=? %s %s %s opts=%s", market, side, orderType, json.dumps(options))
+        return {"dryRun": True, "options": options}
+    return bv.placeOrder(market, side, orderType, options)
+
+def main() -> None:
+    if ENABLE_LIVE and (not API_KEY or not API_SECRET):
+        log.error("ENABLE_LIVE=true maar API key/secret ontbreken — stop."); sys.exit(2)
+
+    r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    ensure_group(r)
+    log.info("Submitter gestart | stream=%s group=%s consumer=%s live=%s", ORDER_STREAM, GROUP, CONSUMER, ENABLE_LIVE)
+
+    while True:
+        resp = r.xreadgroup(GROUP, CONSUMER, {ORDER_STREAM: ">"}, count=10, block=5000)
+        if not resp: continue
+        for _stream, entries in resp:
+            for msg_id, fields in entries:
+                payload = dict(fields)
+                try:
+                    res = place(payload)
+                    ok = not (isinstance(res, dict) and res.get("errorCode"))
+                    level = "OK" if ok else "FAIL"
+                    opts_json = json.dumps(build_options(payload))
+                    log.info("ORDER %s id=%s %s %s %s opts=%s res=%s",
+                             level, msg_id, payload.get("market"), payload.get("side"),
+                             payload.get("orderType"), opts_json, json.dumps(res))
+                    # schrijf ook naar executed-stream (voor TP/SL guard)
+                    try:
+                        r.xadd(ORDER_EXEC, {
+                            "src_id": msg_id,
+                            "market": payload.get("market",""),
+                            "side":   payload.get("side",""),
+                            "orderType": payload.get("orderType",""),
+                            "options": opts_json,
+                            "response": json.dumps(res),
+                            "ts": str(int(time.time()*1000)),
+                        })
+                    except Exception as e:
+                        log.error("EXEC stream write fail for id=%s: %s", msg_id, e)
+                    r.xack(ORDER_STREAM, GROUP, msg_id)
+                except Exception:
+                    log.exception("ORDER EXC id=%s payload=%s", msg_id, json.dumps(fields))
+        time.sleep(0.05)
+
+if __name__ == "__main__":
+    main()

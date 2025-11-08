@@ -1,0 +1,32 @@
+name: corestack
+services:
+  metrics_shim:
+    image: python:3.12-slim
+    container_name: metrics_shim
+    restart: unless-stopped
+    environment:
+      APP_NAME: "trading_core"
+      METRICS_PORT: "9409"
+      # Redis is al gekoppeld aan obsnet en heet zo:
+      REDIS_URL: "redis://datastack-redis-1:6379/0"
+      STREAM_KEYS: "signals:baseline,trading_core:orders,orders:live,orders:executed"
+      POS_STATE_HASH: "trading:positions"
+    volumes:
+      - /srv/trading/tools:/app:ro
+    # Installeer de 'redis' client en start de shim
+    command: >
+      sh -lc "pip install --no-cache-dir redis &&
+              python /app/metrics_shim.py"
+    networks:
+      - obsnet
+    healthcheck:
+      # Gebruik Python ipv wget/curl
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:9409/metrics').read(); print('OK')\nPY"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+
+networks:
+  obsnet:
+    external: true
+    name: obsnet

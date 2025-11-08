@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import os, json, time, decimal, logging, sys
+from typing import Dict, Any
+from redis import Redis
+from redis.exceptions import ResponseError
+from python_bitvavo_api.bitvavo import Bitvavo
+
+D = decimal.Decimal
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+REDIS_URL   = os.getenv("REDIS_URL","redis://127.0.0.1:6379/0")
+ORDER_STREAM= os.getenv("ORDER_STREAM","orders:live")
+EXEC_STREAM = os.getenv("EXEC_STREAM","orders:executed")
+GROUP       = os.getenv("GROUP","trading_submitter")
+CONSUMER    = os.getenv("CONSUMER","submitter-1")
+DRY         = os.getenv("DRY","1") == "1"
+NOTIONAL_EUR= D(os.getenv("NOTIONAL_EUR","10"))
+
+API_KEY     = os.getenv("BITVAVO_API_KEY","")
+API_SECRET  = os.getenv("BITVAVO_API_SECRET","")
+
+r = Redis.from_url(REDIS_URL, decode_responses=True)
+
+def ensure_group():
+    try:
+        r.xgroup_create(name=ORDER_STREAM, groupname=GROUP, id="0-0", mkstream=True)
+        logging.info("XGROUP CREATE %s %s", ORDER_STREAM, GROUP)
+    except ResponseError as e:
+        if "BUSYGROUP" in str(e) or "exists" in str(e):
+            pass
+        else:
+            raise
+
+def parse_payload(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Core plaatst JSON in field 'data'."""
+    raw = entry.get("data")
+    if isinstance(raw, str):
+        p = json.loads(raw)
+    elif isinstance(raw, dict):
+        p = raw
+    else:
+        raise ValueError("Onbekende payloadvorm")
+    return p
+
+def fetch_price(bv: Bitvavo, market: str, side: str) -> D:
+    # Probeer ticker price, val terug op boek
+    tp = bv.tickerPrice({"market": market})
+    if isinstance(tp, dict) and tp.get("price"):
+        return D(tp["price"])
+    book = bv.tickerBook({"market": market}) or {}
+    arr = book.get("asks" if side=="buy" else "bids", [])
+    if arr and arr[0] and arr[0][0]:
+        return D(arr[0][0])
+    raise RuntimeError("Geen prijs beschikbaar voor {}".format(market))
+
+def place_order_live(p: Dict[str, Any]) -> Dict[str, Any]:
+    if not API_KEY or not API_SECRET:
+        raise RuntimeError("BITVAVO creds ontbreken")
+    bv = Bitvavo({"APIKEY": API_KEY, "APISECRET": API_SECRET})
+    market = p["market"]
+    side   = p["side"]
+    # prijs en amount bepalen
+    price  = D(p.get("price") or "0")
+    size_eur = D(p.get("size_eur") or "0")
+    orderType = p.get("orderType")  # kan ontbreken
+
+    if price <= 0:
+        last = fetch_price(bv, market, side)
+        # gebruik MARKET als prijs onbekend; reken amount uit op basis van NOTIONAL_EUR
+        orderType = "market"
+        use_price = last
+    else:
+        orderType = orderType or "limit"
+        use_price = price
+
+    if size_eur > 0:
+        amount = (size_eur / use_price).quantize(D("0.000001"))  # 6 dp
+    else:
+        amount = (NOTIONAL_EUR / use_price).quantize(D("0.000001"))
+
+    if orderType == "market":
+        req = {"market": market, "side": side, "orderType": "market", "amount": str(amount)}
+    else:
+        req = {"market": market, "side": side, "orderType": "limit", "amount": str(amount), "price": f"{use_price:.8f}"}
+
+    logging.info("LIVE placeOrder req=%s", req)
+    res = bv.placeOrder(market, side, req)
+    return {"req": req, "res": res}
+
+def emit_executed(mid: str, status: str, detail: Dict[str, Any]):
+    r.xadd(EXEC_STREAM, {"status": status, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "mid": mid, "order": json.dumps(detail)})
+
+def main():
+    ensure_group()
+    logging.info("Submitter gestart | stream=%s group=%s consumer=%s live=%s", ORDER_STREAM, GROUP, CONSUMER, str(not DRY))
+    while True:
+        resp = r.xreadgroup(GROUP, CONSUMER, {ORDER_STREAM: ">"}, count=10, block=5000)
+        if not resp:
+            continue
+        for stream, items in resp:
+            for mid, fields in items:
+                try:
+                    p = parse_payload(fields)
+                    if DRY:
+                        # Simuleer succesvolle submit met berekende velden
+                        fake = {"market": p.get("market"), "side": p.get("side"),
+                                "orderType": p.get("orderType","auto"),
+                                "amount": p.get("amount","auto"),
+                                "price": p.get("price"), "src": "core_outbox_v2"}
+                        emit_executed(mid, "DRY_OK", fake)
+                    else:
+                        result = place_order_live(p)
+                        emit_executed(mid, "LIVE_OK", result)
+                    r.xack(ORDER_STREAM, GROUP, mid)
+                except Exception as e:
+                    logging.error("ORDER EXC id=%s payload=%s err=%s", mid, json.dumps(fields)[:500], repr(e))
+                    # niet ACK'en; blijft pending voor inspectie

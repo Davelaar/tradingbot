@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import os, json, time, math, decimal, signal, sys
+from typing import Dict, Any, Tuple
+from redis import Redis
+from redis.exceptions import ResponseError
+
+D = decimal.Decimal
+getenv = os.getenv
+
+REDIS_URL   = getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+ORDER_STREAM= getenv("ORDER_STREAM", "orders:live")
+EXEC_STREAM = getenv("EXEC_STREAM",  "orders:executed")
+GROUP       = getenv("GROUP",        "trading_submitter")
+CONSUMER    = getenv("CONSUMER",     "submitter-1")
+LIVE        = getenv("DRY","1") not in ("1","true","TRUE","yes","YES")
+NOTIONAL_EUR= D(getenv("NOTIONAL_PER_TRADE_EUR","10"))
+
+r = Redis.from_url(REDIS_URL, decode_responses=True)
+
+def ensure_groups():
+    for s in (ORDER_STREAM, EXEC_STREAM):
+        try:
+            r.xgroup_create(name=s, groupname=GROUP, id="$", mkstream=True)
+        except ResponseError as e:
+            if "BUSYGROUP" not in str(e):
+                raise
+
+def parse_payload(fields: Dict[str,Any]) -> Dict[str,Any]:
+    # orders:live kan {"data":"<json>"} bevatten; anders meteen fields gebruiken
+    if "data" in fields and isinstance(fields["data"], str):
+        try:
+            fields = json.loads(fields["data"])
+        except Exception:
+            pass
+    return fields
+
+def to_order(fields: Dict[str,Any]) -> Tuple[Dict[str,Any], str]:
+    # verwacht na parse: market, side, price, (size of size_eur/notional), tp_pct/sl_pct
+    act = fields.get("action","OPEN").upper()
+    if act != "OPEN":
+        return {}, "SKIP_NON_OPEN"
+    market = fields["market"]
+    side   = fields.get("side","buy")
+    price  = D(str(fields.get("price","0")))
+    sz_raw = fields.get("size") or fields.get("size_base")
+    if sz_raw:
+        amount = D(str(sz_raw))
+    else:
+        notional = D(str(fields.get("size_eur") or fields.get("notional") or NOTIONAL_EUR))
+        amount = (notional / (price if price>0 else D("1"))).quantize(D("0.000001"), rounding=decimal.ROUND_DOWN)
+    order = {
+        "market": market,
+        "side": side,
+        "orderType": "limit" if price>0 else "market",
+        "amount": str(amount),
+        "price": str(price) if price>0 else None,
+        "tp_pct": str(fields.get("tp_pct","0")),
+        "sl_pct": str(fields.get("sl_pct","0")),
+        "mode": fields.get("mode","percent"),
+        "src": "core_outbox_v2"
+    }
+    return order, "OK"
+
+def ack(stream, gid, mid):
+    try:
+        r.xack(stream, gid, mid)
+    except Exception:
+        pass
+
+def exec_loop():
+    ensure_groups()
+    print(f"Submitter gestart | stream={ORDER_STREAM} group={GROUP} consumer={CONSUMER} live={LIVE}", flush=True)
+    while True:
+        resp = r.xreadgroup(GROUP, CONSUMER, {ORDER_STREAM: ">"}, count=10, block=5000)
+        if not resp:
+            continue
+        for stream, entries in resp:
+            for mid, fields in entries:
+                try:
+                    payload = parse_payload(fields)
+                    order, status = to_order(payload)
+                    if status != "OK":
+                        ack(ORDER_STREAM, GROUP, mid)
+                        continue
+                    # DRY: alleen log + EXEC_STREAM vastleggen
+                    entry = {"status": "DRY_OK" if not LIVE else "LIVE_PLACE",
+                             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                             "mid": mid, "order": json.dumps(order)}
+                    r.xadd(EXEC_STREAM, entry, id="*", maxlen=5000, approximate=True)
+                    # TODO(LIVE): integreren met bitvavo-sdk wanneer LIVE actief is
+                    ack(ORDER_STREAM, GROUP, mid)
+                except Exception as e:
+                    r.xadd(EXEC_STREAM, {"status":"ERROR","mid":mid,"err":str(e),"raw":json.dumps(fields)}, id="*", maxlen=5000, approximate=True)
+                    # geen ack bij error → blijft pending voor inspectie
+        # kleine pauze
+        time.sleep(0.05)
+
+def main():
+    # nette shutdown
+    signal.signal(signal.SIGTERM, lambda s,f: sys.exit(0))
+    signal.signal(signal.SIGINT,  lambda s,f: sys.exit(0))
+    exec_loop()
+
+if __name__ == "__main__":
+    main()

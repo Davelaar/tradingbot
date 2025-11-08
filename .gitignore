@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+logs/
+storage/
+secrets/
+*.env
+.env*
+/srv/trading/storage/
+/srv/trading/logs/
+/srv/trading/secrets/

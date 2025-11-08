@@ -1,0 +1,10 @@
+NETWORK ID     NAME                    DRIVER    SCOPE
+f763d60d36ee   bridge                  bridge    local
+4c38ae122c43   datastack_default       bridge    local
+9f5a0a10fa97   host                    host      local
+b643269b6142   metricsnet              bridge    local
+293e5492cbea   none                    null      local
+e17411d8bb99   observability_default   bridge    local
+2853f12834de   observability_obsnet    bridge    local
+ef54a6327d5e   obsnet                  bridge    local
+b0cc3fa6bccc   webstack_web            bridge    local

@@ -1,0 +1,5 @@
+files.snapdiscounts.nl {
+  encode gzip
+  reverse_proxy filebrowser:8080
+  tls r.davelaar@icloud.com
+}

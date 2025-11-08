@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+trading_core.py — dyn-cap, slot-based, Bitvavo-driven budgetting
+
+- Dynamische kap: gebruikt account:eur_available (van balance_sync_bitvavo.py)
+- Slotbudget: account:slot_budget_eur (EUR_available / SLOTS)
+- Geen hard overrides: MAX_* = 0 betekent "uit"
+- TP/SL in procenten (bijv. TP_PCT=2.0 → +2.0%)
+"""
+
+import os, sys, time, signal
+import datetime as dt
+from typing import Dict, Any, Tuple, Optional, List
+from redis import Redis
+import orjson as jsonf
+
+VERSION = "trading_core 2025-10-30 dyn-cap v2"
+
+# ---------- utilities ----------
+def now_iso() -> str:
+    # UTC, tot op seconde, met 'Z'
+    return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+def _clean_env(v: Optional[str], default) -> str:
+    if v is None:
+        return str(default)
+    return v.split("#", 1)[0].strip()
+
+def env_float(name: str, default: float) -> float:
+    return float(_clean_env(os.getenv(name), default))
+
+def env_int(name: str, default: int) -> int:
+    return int(float(_clean_env(os.getenv(name), default)))
+
+def env_bool(name: str, default: bool) -> bool:
+    v = _clean_env(os.getenv(name), str(default)).lower()
+    return v in ("1", "true", "yes", "on")
+
+# ---------- config ----------
+CONF: Dict[str, Any] = {
+    # infra
+    "REDIS_URL":              _clean_env(os.getenv("REDIS_URL"), "redis://127.0.0.1:6379/0"),
+    "DRY_RUN":                env_bool("DRY_RUN", True),
+
+    # streams / groups
+    "SIGNAL_STREAM":          _clean_env(os.getenv("SIGNAL_STREAM"), "signals:baseline"),
+    "CONSUMER_GROUP":         _clean_env(os.getenv("CONSUMER_GROUP"), "trading_core"),
+    "CONSUMER_NAME":          _clean_env(os.getenv("CONSUMER_NAME"), "core"),
+    "ORDER_OUTBOX_STREAM":    _clean_env(os.getenv("ORDER_OUTBOX_STREAM"), "orders:shadow"),
+    "EVENT_STREAM":           _clean_env(os.getenv("EVENT_STREAM"), "trading:events"),
+
+    # guards
+    "KILL_SWITCH_KEY":        _clean_env(os.getenv("KILL_SWITCH_KEY"), "trading:kill"),
+
+    # caps (0 = uit)
+    "MAX_CONCURRENT_POS":     env_int("MAX_CONCURRENT_POS", 5),
+    "MAX_GLOBAL_EXPOSURE_EUR":env_float("MAX_GLOBAL_EXPOSURE_EUR", 0.0),  # 0 = uit
+    "MAX_PER_ASSET_EUR":      env_float("MAX_PER_ASSET_EUR", 0.0),        # 0 = uit
+    "PER_ASSET_FRAC":         env_float("PER_ASSET_FRAC", 0.0),           # 0 = uit (fractie t.o.v. global dyn cap)
+
+    # TP/SL — waarden in procenten, bv 2.0 = +2%, 1.0 = -1%
+    "TP_SL_MODE":             _clean_env(os.getenv("TP_SL_MODE"), "percent"),
+    "TP_PCT":                 env_float("TP_PCT", 2.0),
+    "SL_PCT":                 env_float("SL_PCT", 1.0),
+    "TRAILING_PCT":           env_float("TRAILING_PCT", 0.0),
+}
+
+# redis keys die balance-sync vult
+KEY_EUR_AVAIL = "account:eur_available"
+KEY_SLOT_BUDG = "account:slot_budget_eur"
+
+# exposure/posities keys
+KEY_EXPOSURE_H = "trading:exposure"   # HSET market -> EUR exposure (en optioneel _global)
+KEY_POSITIONS_H = "trading:positions" # HSET market -> EUR exposure
+
+r: Redis = Redis.from_url(CONF["REDIS_URL"], decode_responses=True)
+
+# ---------- core helpers ----------
+def log_event(level: str, msg: str, where: Optional[str]=None):
+    payload = {"lvl": level, "msg": msg, "ts": now_iso()}
+    if where:
+        payload["where"] = where
+    try:
+        r.xadd(CONF["EVENT_STREAM"], payload)
+    except Exception:
+        pass
+
+def ensure_group(stream: str, group: str):
+    # maak consumer group als die nog niet bestaat
+    try:
+        r.xgroup_create(stream, group, id="$", mkstream=True)
+    except Exception as e:
+        # BUSYGROUP = bestaat al → ok
+        if "BUSYGROUP" in str(e):
+            return
+
+def pos_count() -> int:
+    try:
+        return r.hlen(KEY_POSITIONS_H)
+    except Exception:
+        return 0
+
+def sum_exposure(vals: List[str]) -> float:
+    s = 0.0
+    for v in vals:
+        try:
+            s += float(v)
+        except Exception:
+            continue
+    return s
+
+def get_current_exposure() -> Tuple[float, Dict[str, float]]:
+    # lees alle per-asset exposures (EUR)
+    try:
+        mapping = r.hgetall(KEY_EXPOSURE_H) or {}
+    except Exception:
+        mapping = {}
+    per_asset = {}
+    for k, v in mapping.items():
+        if k == "_global":
+            continue
+        try:
+            per_asset[k] = float(v)
+        except Exception:
+            continue
+    cur_global = sum_exposure([f"{v}" for v in per_asset.values()])
+    return cur_global, per_asset
+
+def eur_available() -> float:
+    try:
+        return float(r.get(KEY_EUR_AVAIL) or 0.0)
+    except Exception:
+        return 0.0
+
+def slot_budget_eur() -> float:
+    try:
+        return float(r.get(KEY_SLOT_BUDG) or 0.0)
+    except Exception:
+        return 0.0
+
+def compute_caps() -> Tuple[float, float]:
+    """
+    Retourneert (gcap, pacap_default).
+    - gcap (global cap): als MAX_GLOBAL_EXPOSURE_EUR>0 → die waarde
+                         anders: dyn = current_exposure + eur_available (zodat check neerkomt op size <= EUR_available)
+    - pacap_default: baseline per-asset cap
+        * als MAX_PER_ASSET_EUR>0 → die waarde
+        * anders 0 = 'uit' (oneindig), maar we limiteren wél op slot_budget als die >0 (één slot per entry).
+    """
+    cur_global, _ = get_current_exposure()
+    eur_av = eur_available()
+
+    if CONF["MAX_GLOBAL_EXPOSURE_EUR"] > 0:
+        gcap = float(CONF["MAX_GLOBAL_EXPOSURE_EUR"])
+    else:
+        gcap = cur_global + eur_av
+
+    if CONF["MAX_PER_ASSET_EUR"] > 0:
+        pacap = float(CONF["MAX_PER_ASSET_EUR"])
+    else:
+        pacap = 0.0  # uit
+
+    # optionele fractie van global
+    if CONF["PER_ASSET_FRAC"] > 0:
+        frac_cap = gcap * float(CONF["PER_ASSET_FRAC"])
+        pacap = frac_cap if pacap == 0.0 else min(pacap, frac_cap)
+
+    # slotbudget als zachte limiet: je entry mag nooit groter zijn dan 1 slot
+    sb = slot_budget_eur()
+    if sb > 0:
+        pacap = sb if pacap == 0.0 else min(pacap, sb)
+
+    return gcap, pacap
+
+def blocked_by_guards(market: str, size_eur: float) -> Tuple[bool, str]:
+    # kill switch
+    if (r.get(CONF["KILL_SWITCH_KEY"]) or "0") in ("1", "true", "on", "yes"):
+        return True, "kill_switch=ON"
+
+    # slots
+    max_slots = int(CONF["MAX_CONCURRENT_POS"])
+    if max_slots > 0 and pos_count() >= max_slots:
+        return True, f"slot_cap {pos_count()}>={max_slots}"
+
+    # caps
+    cur_global, per_asset = get_current_exposure()
+    cur_asset = float(per_asset.get(market, 0.0))
+    gcap, pacap = compute_caps()
+
+    # global: check op (cur_global + size) <= gcap
+    if cur_global + size_eur > gcap + 1e-9:
+        return True, f"global cap {cur_global+size_eur:.2f}>{gcap:.2f}"
+
+    # per-asset: check op (cur_asset + size) <= pacap (alleen als pacap > 0)
+    if pacap > 0 and (cur_asset + size_eur > pacap + 1e-9):
+        return True, f"asset cap {cur_asset+size_eur:.2f}>{pacap:.2f}"
+
+    # additionele check: entry groter dan EUR_available? (redundant met global dyn, maar expliciet is fijn)
+    ea = eur_available()
+    if ea > 0 and size_eur > ea + 1e-9:
+        return True, f"insufficient EUR_available {size_eur:.2f}>{ea:.2f}"
+
+    return False, ""
+
+def write_order_outbox(signal_id: str, market: str, side: str, entry_price: float, size_eur: float):
+    order = {
+        "ts":          now_iso(),
+        "version":     VERSION,
+        "dry_run":     "true" if CONF["DRY_RUN"] else "false",
+        "action":      "OPEN",
+        "signal_id":   signal_id,
+        "market":      market,
+        "side":        side.lower(),
+        "price":       f"{entry_price:.8f}",
+        "size_eur":    f"{size_eur:.2f}",
+        "mode":        CONF["TP_SL_MODE"],
+        "tp_pct":      f"{CONF['TP_PCT']:.4f}",
+        "sl_pct":      f"{CONF['SL_PCT']:.4f}",
+        "trail_pct":   f"{CONF['TRAILING_PCT']:.4f}",
+    }
+    r.xadd(CONF["ORDER_OUTBOX_STREAM"], {"data": jsonf.dumps(order).decode("utf-8")})
+
+def bump_exposure(market: str, delta_eur: float):
+    # per-asset
+    r.hincrbyfloat(KEY_EXPOSURE_H, market, float(f"{delta_eur:.8f}"))
+    # optioneel: hou _global bij zodat dashboards makkelijk kunnen lezen
+    r.hincrbyfloat(KEY_EXPOSURE_H, "_global", float(f"{delta_eur:.8f}"))
+    # posities (distinct markets → slots)
+    r.hincrbyfloat(KEY_POSITIONS_H, f"{market}", float(f"{delta_eur:.8f}"))
+
+# ---------- signal processing ----------
+def handle_signal(msg_id: str, fields: Dict[str, str]):
+    market = (fields.get("market") or "").strip()
+    side   = (fields.get("side")   or "").strip().lower()
+    price  = float(fields.get("price") or 0.0)
+    size_eur = float(fields.get("size_eur") or 0.0)
+
+    if not market:
+        log_event("WARN", "drop signal: missing market", "handle_signal")
+        return
+
+    if side not in ("buy", "sell"):
+        log_event("WARN", f"drop signal: unsupported side '{side}'", "handle_signal")
+        return
+
+    # Guards
+    blocked, reason = blocked_by_guards(market, size_eur)
+    if blocked:
+        log_event("WARN", f"guard_block {market} {reason}", "loop")
+        return
+
+    # Publish to outbox
+    write_order_outbox(msg_id, market, side, price, size_eur)
+    bump_exposure(market, size_eur)
+    log_event("INFO", f"queued OPEN {market} {side} {size_eur:.2f}€ @~{price}", "loop")
+
+def consume_loop():
+    stream = CONF["SIGNAL_STREAM"]
+    group  = CONF["CONSUMER_GROUP"]
+    name   = CONF["CONSUMER_NAME"]
+
+    ensure_group(stream, group)
+    # banner
+    print(f"[core] start; {VERSION}; dry_run={CONF['DRY_RUN']} stream={stream} group={CONF['CONSUMER_GROUP']}", file=sys.stderr, flush=True)
+
+    block_ms = 5000
+    while True:
+        # graceful stop
+        if _STOP[0]:
+            print("[core] stopped", file=sys.stderr, flush=True)
+            break
+
+        try:
+            resp = r.xreadgroup(group, name, streams={stream: ">"}, count=50, block=block_ms)
+            if not resp:
+                continue
+
+            # resp = [(stream, [(id, {fields}), ...])]
+            for _stream, entries in resp:
+                for msg_id, raw in entries:
+                    try:
+                        handle_signal(msg_id, raw)
+                    except Exception as e:
+                        log_event("ERROR", f"{e}", "loop")
+                    finally:
+                        try:
+                            r.xack(stream, group, msg_id)
+                        except Exception:
+                            pass
+        except Exception as e:
+            log_event("ERROR", f"{e}", "read_loop")
+            time.sleep(1.0)
+
+# ---------- signals / entry ----------
+_STOP = [False]
+def _sigterm(_s, _f):
+    _STOP[0] = True
+
+def main():
+    signal.signal(signal.SIGTERM, _sigterm)
+    signal.signal(signal.SIGINT, _sigterm)
+    consume_loop()
+
+if __name__ == "__main__":
+    main()

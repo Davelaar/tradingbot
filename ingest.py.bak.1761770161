@@ -1,0 +1,98 @@
+import os, sys, signal, pathlib, datetime as dt
+import orjson as jsonf
+from redis import Redis
+from python_bitvavo_api.bitvavo import Bitvavo
+
+CONF = {
+  "REDIS_URL": os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
+  "PARQUET_DIR": os.getenv("PARQUET_DIR", "/srv/trading/storage/parquet"),
+  "INGEST_MARKETS": os.getenv("INGEST_MARKETS", "ALL"),
+  "BITVAVO_API_KEY": os.getenv("BITVAVO_API_KEY", ""),
+  "BITVAVO_API_SECRET": os.getenv("BITVAVO_API_SECRET", ""),
+}
+
+r = Redis.from_url(CONF["REDIS_URL"], decode_responses=False)
+
+def day_dir(category: str):
+    d = dt.datetime.utcnow().strftime("%Y-%m-%d")
+    base = pathlib.Path(CONF["PARQUET_DIR"]) / d
+    if category == "trades":
+        base = base / "trades"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+def append_jsonl(category: str, market: str, rows):
+    fn = day_dir(category) / f"{market.replace('/', '-')}.jsonl"
+    with open(fn, "ab") as f:
+        for row in rows:
+            f.write(jsonf.dumps(row) + b"\n")
+
+running = True
+def stop(*_):
+    global running; running = False
+signal.signal(signal.SIGTERM, stop)
+signal.signal(signal.SIGINT, stop)
+
+bv = Bitvavo({
+    "APIKEY": CONF["BITVAVO_API_KEY"],
+    "APISECRET": CONF["BITVAVO_API_SECRET"],
+    "RESTURL": "https://api.bitvavo.com/v2",
+    "WSURL": "wss://ws.bitvavo.com/v2",
+    "ACCESSWINDOW": 10000
+})
+
+def get_markets():
+    if CONF["INGEST_MARKETS"].upper() == "ALL":
+        mkts = [m["market"] for m in bv.markets({})]
+        return [m for m in mkts if m.endswith("-EUR")]
+    return [m.strip() for m in CONF["INGEST_MARKETS"].split(",") if m.strip()]
+
+markets = get_markets()
+print(f"[ws] subscribing {len(markets)} markets to ticker24h + trades..", file=sys.stderr)
+
+# batches per (event, market)
+batch = {}  # key=(evt, market) -> list
+BATCH_LIMIT = {"ticker24h": 500, "trades": 100}
+
+def handle(evt: str, ev: dict):
+    if not isinstance(ev, dict):
+        return
+    m = ev.get("market") or ev.get("marketId") or ev.get("pair") or "unknown"
+    # RAW-first: direct naar Redis
+    r.xadd(f"bitvavo:{evt}", {"data": jsonf.dumps(ev)})
+    # batch naar file
+    key = (evt, m)
+    batch.setdefault(key, []).append(ev)
+    if len(batch[key]) >= BATCH_LIMIT.get(evt, 500):
+        append_jsonl("trades" if evt=="trades" else "ticker24h", m, batch[key])
+        batch[key] = []
+
+def on_event(ev):
+    # uniforme callback: verwacht dicts met "event"
+    if not isinstance(ev, dict) or "event" not in ev:
+        return
+    evt = ev["event"]
+    if evt in ("ticker24h", "trades"):
+        handle(evt, ev)
+    else:
+        # eventuele andere events parkeren
+        r.xadd("bitvavo:other", {"data": jsonf.dumps(ev)})
+
+def on_error(code, msg):
+    print(f"[error] {code} {msg}", file=sys.stderr)
+
+def on_open():
+    subs = [
+        {"name": "ticker24h", "markets": markets},
+        {"name": "trades",    "markets": markets},
+    ]
+    bv.subscription("subscribe", subs, on_event)
+
+# Start websocket met bewezen patroon
+bv.websocket(on_open, on_event, on_error)
+
+# flush rest
+for (evt, m), rows in list(batch.items()):
+    if rows:
+        append_jsonl("trades" if evt=="trades" else "ticker24h", m, rows)
+print("[ws] stopped", file=sys.stderr)

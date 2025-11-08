@@ -1,0 +1,18 @@
+# Observability Audit Inventory — 20251030_214213
+
+## Compose-bestanden gevonden:
+- /srv/trading/_obs_audit_20251030_214213/compose/prometheus.yml.bak.1761837784
+- /srv/trading/_obs_audit_20251030_214213/compose/.env.web
+- /srv/trading/_obs_audit_20251030_214213/compose/prometheus.yml
+- /srv/trading/_obs_audit_20251030_214213/compose/prometheus.yml.bak.1761836332
+- /srv/trading/_obs_audit_20251030_214213/compose/docker-compose.data.yml
+- /srv/trading/_obs_audit_20251030_214213/compose/docker-compose.web.yml
+- /srv/trading/_obs_audit_20251030_214213/compose/docker-compose.obs.yml
+
+## Prometheus configuratie:
+- compose/prometheus.yml (aanwezig)
+
+## Weblaag configs:
+- /srv/trading/_obs_audit_20251030_214213/web/Caddyfile
+
+## Services (tradingbot):

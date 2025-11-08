@@ -1,0 +1,18 @@
+[Unit]
+Description=Bitvavo ingest - ticker24h + trades (WebSocket)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.bitvavo
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/ingest.py
+Restart=always
+RestartSec=2
+# Hardening (optioneel, kan je aanscherpen)
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

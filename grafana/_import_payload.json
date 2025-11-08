@@ -1,0 +1,250 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": null,
+    "links": [],
+    "panels": [
+      {
+        "type": "stat",
+        "title": "UP – trading_core",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "up{job=\"trading_core\",instance=\"trading_core:9101\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "type": "stat",
+        "title": "UP – ingest",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "up{job=\"trading_core\",instance=\"ingest:9102\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 0
+        }
+      },
+      {
+        "type": "stat",
+        "title": "UP – ai_baseline",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "up{job=\"trading_core\",instance=\"ai_baseline:9103\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 0
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Signals (stream_xlen)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "stream_xlen{stream=\"signals:baseline\"}",
+            "refId": "A",
+            "legendFormat": "signals:baseline"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Orders (stream_xlen)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "stream_xlen{stream=\"trading_core:orders\"}",
+            "refId": "A",
+            "legendFormat": "trading_core:orders"
+          },
+          {
+            "expr": "stream_xlen{stream=\"orders:live\"}",
+            "refId": "B",
+            "legendFormat": "orders:live"
+          },
+          {
+            "expr": "stream_xlen{stream=\"orders:executed\"}",
+            "refId": "C",
+            "legendFormat": "orders:executed"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        }
+      },
+      {
+        "type": "stat",
+        "title": "Open positions",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "positions_open_total",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 12
+        }
+      },
+      {
+        "type": "stat",
+        "title": "Redis UP",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "max(redis_up)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 12
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Shim heartbeat & uptime",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "targets": [
+          {
+            "expr": "increase(shim_heartbeat_total[5m])",
+            "refId": "A",
+            "legendFormat": "heartbeat/5m"
+          },
+          {
+            "expr": "process_uptime_seconds{app=\"trading_core\"}",
+            "refId": "B",
+            "legendFormat": "uptime (shim)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        }
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 39,
+    "style": "dark",
+    "tags": [
+      "Production",
+      "Trading",
+      "Observability"
+    ],
+    "timezone": "browser",
+    "title": "Trading — Production Overview",
+    "version": 1
+  },
+  "overwrite": true,
+  "folderId": 0
+}

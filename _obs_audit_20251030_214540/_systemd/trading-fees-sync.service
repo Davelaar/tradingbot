@@ -1,0 +1,13 @@
+# /etc/systemd/system/trading-fees-sync.service
+[Unit]
+Description=Bitvavo Fees Sync
+After=network-online.target
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.trading
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/tools/fees_sync_bitvavo.py
+WorkingDirectory=/srv/trading
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

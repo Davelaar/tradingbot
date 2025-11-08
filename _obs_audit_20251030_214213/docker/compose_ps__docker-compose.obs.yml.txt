@@ -1,0 +1,7 @@
+$ docker compose -f /srv/trading/compose/docker-compose.obs.yml ps
+NAME                             IMAGE                             COMMAND                  SERVICE          CREATED       STATUS                 PORTS
+observability-cadvisor-1         gcr.io/cadvisor/cadvisor:latest   "/usr/bin/cadvisor -…"   cadvisor         7 hours ago   Up 7 hours (healthy)   8080/tcp
+observability-grafana-1          grafana/grafana:latest            "/run.sh"                grafana          7 hours ago   Up 7 hours             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+observability-node_exporter-1    prom/node-exporter:latest         "/bin/node_exporter"     node_exporter    7 hours ago   Up 7 hours             9100/tcp
+observability-prometheus-1       prom/prometheus:latest            "/bin/prometheus --c…"   prometheus       7 hours ago   Up 6 hours             0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+observability-redis_exporter-1   oliver006/redis_exporter:latest   "/redis_exporter"        redis_exporter   6 hours ago   Up 6 hours             9121/tcp

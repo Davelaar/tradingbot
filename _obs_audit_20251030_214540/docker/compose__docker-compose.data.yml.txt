@@ -1,0 +1,51 @@
+$ docker compose -f /srv/trading/compose/docker-compose.data.yml ps
+time="2025-10-30T21:45:40Z" level=warning msg="/srv/trading/compose/docker-compose.data.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+NAME                IMAGE              COMMAND                  SERVICE   CREATED       STATUS       PORTS
+datastack-redis-1   redis:7.4-alpine   "docker-entrypoint.s…"   redis     6 hours ago   Up 6 hours   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+
+$ docker compose -f /srv/trading/compose/docker-compose.data.yml config
+time="2025-10-30T21:45:40Z" level=warning msg="/srv/trading/compose/docker-compose.data.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+name: compose
+services:
+  redis:
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 8gb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - "900"
+      - "1"
+      - --save
+      - "300"
+      - "10"
+      - --save
+      - "60"
+      - "10000"
+    container_name: datastack-redis-1
+    image: redis:7.4-alpine
+    networks:
+      metricsnet: null
+      obsnet: null
+    ports:
+      - mode: ingress
+        target: 6379
+        published: "6379"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /srv/trading/storage/redis
+        target: /data
+        bind:
+          create_host_path: true
+networks:
+  metricsnet:
+    name: metricsnet
+    external: true
+  obsnet:
+    name: obsnet
+    external: true

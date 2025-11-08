@@ -1,0 +1,39 @@
+[
+    {
+        "Name": "metricsnet",
+        "Id": "b643269b614228c5761c0f3264214556ae98994f75713c863b55e9f9100e9ea1",
+        "Created": "2025-10-30T14:38:12.690160293Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.22.0.0/16",
+                    "Gateway": "172.22.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "a94c264dcab3ca95d779dc0bfd33f15211953ae851b9e9a321be1a3a9069fa2f": {
+                "Name": "datastack-redis-1",
+                "EndpointID": "4dcd073cf7d0ae88b518583cf7f4e06e1e5a258cea0bb660b740740045d354ba",
+                "MacAddress": "4a:f7:69:29:d3:b6",
+                "IPv4Address": "172.22.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {}
+    }
+]

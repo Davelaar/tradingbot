@@ -1,0 +1,16 @@
+[Unit]
+Description=Trading - Dry-run Fills & PnL Simulator
+After=network-online.target redis.service
+Wants=network-online.target
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.trading
+WorkingDirectory=/srv/trading
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/tools/fills_sim.py
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

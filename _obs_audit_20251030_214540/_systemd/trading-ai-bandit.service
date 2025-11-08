@@ -1,0 +1,21 @@
+[Unit]
+Description=Trading AI Bandit Hook (5.2)
+After=network-online.target redis-server.service trading-ai-baseline.service
+Wants=network-online.target
+
+[Service]
+User=trader
+Group=trader
+EnvironmentFile=/srv/trading/.env.ai
+WorkingDirectory=/srv/trading
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/ai/bandit_hook.py
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

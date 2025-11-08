@@ -1,0 +1,21 @@
+[Unit]
+Description=Tradingbot - REST candle backfill (laatste 24h)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=trader
+Group=trader
+WorkingDirectory=/srv/trading
+EnvironmentFile=/srv/trading/.env.bitvavo
+# Optioneel: pas desnoods de waarden hieronder aan
+Environment=BACKFILL_INTERVALS=1m,5m,1h
+Environment=BACKFILL_MARKETS=ALL
+Environment=BACKFILL_HOURS=24
+Environment=RATE_MIN=200
+Environment=SLEEP_BETWEEN_CALLS=0.05
+ExecStart=/srv/trading/.venv/bin/python /srv/trading/backfill_candles.py
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5

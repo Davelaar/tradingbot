@@ -1,0 +1,21 @@
+== Redis PING ==
+PONG
+
+== Streams baseline & orders: xlen, groups ==
+3164
+0
+name
+trading_submitter
+consumers
+1
+pending
+0
+last-delivered-id
+0-0
+entries-read
+
+lag
+0
+
+== Laatste 5 entries uit orders:live (XRANGE) ==
+

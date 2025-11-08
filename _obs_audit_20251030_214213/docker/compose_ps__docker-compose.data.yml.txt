@@ -1,0 +1,3 @@
+$ docker compose -f /srv/trading/compose/docker-compose.data.yml ps
+NAME                IMAGE              COMMAND                  SERVICE   CREATED       STATUS       PORTS
+datastack-redis-1   redis:7.4-alpine   "docker-entrypoint.s…"   redis     6 hours ago   Up 6 hours   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
