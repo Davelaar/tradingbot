@@ -3,6 +3,8 @@ import orjson as jsonf
 from redis import Redis
 from python_bitvavo_api.bitvavo import Bitvavo
 
+from tradingbot_storage.parquet_sink import ParquetConfig, ParquetSink
+
 CONF = {
   "REDIS_URL": os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
   "PARQUET_DIR": os.getenv("PARQUET_DIR", "/srv/trading/storage/parquet"),
@@ -16,7 +18,7 @@ r = Redis.from_url(CONF["REDIS_URL"], decode_responses=False)
 
 def day_dir(kind: str) -> pathlib.Path:
   d = dt.datetime.utcnow().strftime("%Y-%m-%d")
-  base = pathlib.Path(CONF["PARQUET_DIR"]) / d
+  base = pathlib.Path(CONF["PARQUET_DIR"]).expanduser() / d
   if kind == "trades":
     base = base / "trades"
   base.mkdir(parents=True, exist_ok=True)
@@ -27,6 +29,21 @@ def append_jsonl(kind: str, market: str, rows: list):
   with open(fn, "ab") as f:
     for row in rows:
       f.write(jsonf.dumps(row) + b"\n")
+
+
+PARQUET_SINK = ParquetSink(ParquetConfig.from_env())
+JSONL_KIND = {"trades": "trades", "ticker24h": "ticker24h"}
+
+
+def flush_bucket(evt: str, market: str):
+  key = (evt, market)
+  rows = batch.get(key)
+  if not rows:
+    return
+
+  append_jsonl(JSONL_KIND.get(evt, evt), market, rows)
+  PARQUET_SINK.write(evt, market, rows)
+  batch[key] = []
 
 # Bitvavo SDK
 bv = Bitvavo({'APIKEY': CONF["BITVAVO_API_KEY"], 'APISECRET': CONF["BITVAVO_API_SECRET"]})
@@ -61,16 +78,14 @@ def _handle(evt: str, ev: dict):
   bucket = batch.setdefault(key, [])
   bucket.append(ev)
   if len(bucket) >= BATCH_LIMIT[evt]:
-    append_jsonl("trades" if evt == "trades" else "ticker24h", m, bucket)
-    batch[key] = []
+    flush_bucket(evt, m)
 
 def _flush_if_due():
   global last_flush
   if time.time() - last_flush >= FLUSH_SECS:
     for (evt, m), rows in list(batch.items()):
       if rows:
-        append_jsonl("trades" if evt == "trades" else "ticker24h", m, rows)
-        batch[(evt, m)] = []
+        flush_bucket(evt, m)
     last_flush = time.time()
 
 # --- Callbacks (beide payloadvormen veilig ondersteunen) ---
@@ -121,5 +136,5 @@ finally:
   # afsluit-flush
   for (evt, m), rows in list(batch.items()):
     if rows:
-      append_jsonl("trades" if evt == "trades" else "ticker24h", m, rows)
+      flush_bucket(evt, m)
   print("[ws] stopped", file=sys.stderr)

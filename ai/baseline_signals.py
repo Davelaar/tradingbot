@@ -111,8 +111,33 @@ def emit_signal(mkt: str, base: Dict[str, Any]):
     base["t"] = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
     r.xadd(CFG["SIGNAL_STREAM"], base, maxlen=100000, approximate=True)
 
+def _first_float(ev: Dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        if key in ev and ev[key] is not None:
+            try:
+                return float(ev[key])
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
 def handle_ticker(ev: Dict[str, Any]):
-    pass
+    mkt = ev.get("market") or ev.get("marketId") or ev.get("pair")
+    if not mkt:
+        return
+    ms = state.setdefault(mkt, MktState())
+
+    bid = _first_float(ev, "bestBid", "bid", "b")
+    ask = _first_float(ev, "bestAsk", "ask", "a")
+    if bid and ask and bid > 0 and ask > 0:
+        ms.last_bidask = (bid, ask)
+
+    last_price = _first_float(ev, "lastPrice", "price", "lastTradedPrice")
+    if last_price and last_price > 0:
+        if ms.last_close is not None and ms.last_close > 0:
+            ret = (last_price - ms.last_close) / ms.last_close
+            ms.returns.append(ret)
+        ms.last_close = last_price
 
 def handle_book(ev: Dict[str, Any]):
     mkt = ev.get("market") or ev.get("marketId") or ev.get("pair")

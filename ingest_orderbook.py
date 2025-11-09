@@ -1,9 +1,11 @@
 import os, sys, time, signal, pathlib, datetime as dt
 import orjson as jsonf
 from collections import deque
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from redis import Redis
 from python_bitvavo_api.bitvavo import Bitvavo
+
+from tradingbot_storage.parquet_sink import ParquetConfig, ParquetSink
 
 CONF = {
   "REDIS_URL": os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
@@ -24,19 +26,90 @@ CONF = {
 # IO helpers
 r = Redis.from_url(CONF["REDIS_URL"], decode_responses=False)
 
-def day_dir() -> pathlib.Path:
+def day_dir(kind: str) -> pathlib.Path:
   d = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-  p = pathlib.Path(CONF["PARQUET_DIR"]) / d / "orderbook"
+  base = pathlib.Path(CONF["PARQUET_DIR"]).expanduser()
+  p = base / d / "orderbook" / kind
   p.mkdir(parents=True, exist_ok=True)
   return p
 
-def append_jsonl(market: str, payload: dict):
-  fn = day_dir() / f"{market.replace('/', '-')}.jsonl"
+def append_jsonl(kind: str, market: str, payload: dict):
+  fn = day_dir(kind) / f"{market.replace('/', '-')}.jsonl"
   with open(fn, "ab") as f:
     f.write(jsonf.dumps(payload) + b"\n")
 
+
+PARQUET_SINK = ParquetSink(ParquetConfig.from_env())
+_PARQUET_BATCH_LIMIT = {"snapshot": 1, "update": 200, "top": 400}
+_PARQUET_BUFFER = {}
+_PARQUET_LAST_FLUSH = time.time()
+_PARQUET_FLUSH_SECS = 5
+
+
+def _parquet_key(kind: str, market: str):
+  return (kind, market)
+
+
+def parquet_append(kind: str, market: str, payload: dict):
+  key = _parquet_key(kind, market)
+  bucket = _PARQUET_BUFFER.setdefault(key, [])
+  bucket.append(payload)
+  if len(bucket) >= _PARQUET_BATCH_LIMIT[kind]:
+    parquet_flush(kind, market)
+
+
+def parquet_flush(kind: Optional[str] = None, market: Optional[str] = None):
+  global _PARQUET_LAST_FLUSH
+  targets = []
+  if kind is not None and market is not None:
+    targets.append(_parquet_key(kind, market))
+  else:
+    targets.extend(list(_PARQUET_BUFFER.keys()))
+
+  for key in targets:
+    rows = _PARQUET_BUFFER.get(key)
+    if not rows:
+      continue
+    event, mkt = key
+    PARQUET_SINK.write(f"orderbook:{event}", mkt, rows)
+    _PARQUET_BUFFER[key] = []
+    _PARQUET_LAST_FLUSH = time.time()
+
+
+def parquet_flush_if_due():
+  global _PARQUET_LAST_FLUSH
+  if time.time() - _PARQUET_LAST_FLUSH >= _PARQUET_FLUSH_SECS:
+    parquet_flush()
+
 def xadd(market: str, obj: dict):
   r.xadd(f"bitvavo:book:{market}", {"data": jsonf.dumps(obj)})
+
+def xadd_top(obj: dict):
+  r.xadd("bitvavo:book", {"data": jsonf.dumps(obj)})
+
+
+def emit_top_of_book(market: str, lb: 'LocalBook', origin: str):
+  top = lb.current_top()
+  if not top:
+    return
+  if lb.last_top == top:
+    return
+  bid_price, bid_amount, ask_price, ask_amount = top
+  payload = {
+    "event": "topOfBook",
+    "market": market,
+    "bestBid": bid_price,
+    "bestBidSize": bid_amount,
+    "bestAsk": ask_price,
+    "bestAskSize": ask_amount,
+    "nonce": lb.last_nonce,
+    "source": origin,
+    "timestamp": int(time.time()*1000),
+  }
+  xadd_top(payload)
+  append_jsonl("top", market, payload)
+  parquet_append("top", market, payload)
+  lb.last_top = top
 
 def wait_for_budget(bv: Bitvavo):
   while True:
@@ -60,6 +133,7 @@ class LocalBook:
     self.seeded: bool = False
     self.buffer: deque = deque()         # ruwe updates (dicts)
     self.await_until: Optional[float] = None  # epoch-seconden (deadline) na snapshot
+    self.last_top: Optional[Tuple[float, float, float, float]] = None
 
   def _apply_side(self, side: str, levels):
     book = self.bids if side == "bids" else self.asks
@@ -82,6 +156,7 @@ class LocalBook:
     self._apply_side("asks", snap.get("asks", []))
     self.last_nonce = int(snap.get("nonce", -1))
     self.seeded = True
+    self.last_top = None
     # Zet non-blocking grace-deadline
     self.await_until = time.time() + (CONF["DRAIN_GRACE_MS"] / 1000.0)
 
@@ -140,6 +215,20 @@ class LocalBook:
     self.seeded = False
     self.await_until = None
     self.buffer.clear()
+    self.last_top = None
+
+  def current_top(self) -> Optional[Tuple[float, float, float, float]]:
+    if not self.bids or not self.asks:
+      return None
+    try:
+      bid_price, bid_amount = next(iter(self.bids.items()))
+      ask_price, ask_amount = next(iter(self.asks.items()))
+    except StopIteration:
+      return None
+    try:
+      return (float(bid_price), float(bid_amount), float(ask_price), float(ask_amount))
+    except (TypeError, ValueError):
+      return None
 
 class OrderbookIngest:
   def __init__(self):
@@ -170,7 +259,9 @@ class OrderbookIngest:
     lb = self.books.setdefault(market, LocalBook(self.depth))
     lb.apply_snapshot(snap)
     payload = {"event":"snapshot","market":market,"data":snap,"timestamp":int(time.time()*1000)}
-    xadd(market, payload); append_jsonl(market, payload)
+    xadd(market, payload); append_jsonl("snapshot", market, payload)
+    parquet_append("snapshot", market, payload)
+    emit_top_of_book(market, lb, "snapshot")
     print(f"[seed] {market} bids={len(snap.get('bids',[]))} asks={len(snap.get('asks',[]))} nonce={lb.last_nonce}")
     return True
 
@@ -187,11 +278,14 @@ class OrderbookIngest:
       "asks": data.get("asks", []),
     }
     obj = {"event":"bookUpdate","market":market,"data":update,"timestamp":int(time.time()*1000)}
-    xadd(market, obj); append_jsonl(market, obj)
+    xadd(market, obj); append_jsonl("update", market, obj)
+    parquet_append("update", market, obj)
 
     lb = self.books.setdefault(market, LocalBook(self.depth))
     # probeer toe te passen of bufferen
     applied = lb.try_apply_update(update)
+    if applied:
+      emit_top_of_book(market, lb, "realtime")
     if not applied and not lb.seeded:
       # nog vóór snapshot: gewoon bufferen
       return
@@ -231,6 +325,7 @@ class OrderbookIngest:
           # seeded: als we binnen grace zitten, probeer 1 stap expected te zetten
           if lb.can_drain_now():
             if lb.drain_step():
+              emit_top_of_book(m, lb, "buffered")
               progressed += 1
               continue
             # als niets te doen en grace is verlopen → resnapshot
@@ -243,10 +338,12 @@ class OrderbookIngest:
 
         # 2) klein slaapje om CPU te sparen; als we voortgang hadden, houden we het tempo hoog
         time.sleep(0.02 if progressed else 0.08)
+        parquet_flush_if_due()
 
     finally:
       try: self.ws.closeSocket()
       except Exception: pass
+      parquet_flush()
       print("[orderbook] stopped", file=sys.stderr)
 
 if __name__ == "__main__":
