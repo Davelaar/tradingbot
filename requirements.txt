@@ -1,2 +1,4 @@
 python_bitvavo_api==1.4.2
 redis>=5.0
+orjson>=3.10
+pyarrow==17.0.0
