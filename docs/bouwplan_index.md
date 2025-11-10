@@ -2,7 +2,7 @@
 # Bouwplan Index — Tradingbot Bitvavo (v2)
 **Datum:** 2025-10-29
 
-Deze index hoort bij de 8 hoofdstukken van het bouwplan.  
+Deze index hoort bij de 9 hoofdstukken van het bouwplan.
 Gebruik dit bestand als **startpunt en voortgangscheck**.
 
 ---
@@ -30,7 +30,8 @@ Een volledig herhaalbare installatie van de tradingbot op **Ubuntu 24.04** — 
 | 5 | 05_ai_layer.md | AI baseline + bandit hooks | ☐ / ☑ |
 | 6 | 06_trading_core.md | Trading Core (dry-run→live) | ☐ / ☑ |
 | 7 | 07_observability.md | Prometheus + Grafana | ☐ / ☑ |
-| 8 | 08_lifecycle.md | Backups, updates, security | ☐ / ☑ |
+| 8 | 07_go_live_checklist.md | Eindcontrole ingest→core→executor live | ☐ / ☑ |
+| 9 | 08_lifecycle.md | Backups, updates, security | ☐ / ☑ |
 
 Markeer de kolom **Status** per stap met ☑ zodra een hoofdstuk volledig gevalideerd is.
 
@@ -54,6 +55,7 @@ Na verwijdering van een chat hoef je alleen opnieuw te uploaden:
 05_ai_layer.md
 06_trading_core.md
 07_observability.md
+07_go_live_checklist.md
 08_lifecycle.md
 bouwplan_index.md
 ```
