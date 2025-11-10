@@ -23,6 +23,9 @@ De kerncomponenten zijn nu als afzonderlijke services beschikbaar:
 > `Intent`, `MomentumIntent` en `MeanReversionIntent` beschikbaar zoals geëist in het bouwplan. De overige services
 > publiceren hun `main`-entrypoints en eventstreams via hun respectieve `exports/__init__.py` modules.
 
+> **Sanity check:** valideer dat alle pakketten compileren met
+> `python -m compileall services/trading_core/trading_core services/trader_signal_engine/app services/trader_executor/app services/trader_pnl_orchestrator/app services/trader_universe_selector/app`.
+
 Iedere map bevat de door het bouwplan vereiste entrypoints; bestaande scripts
 (`trading_core.py`, `ai/baseline_signals.py`, metrics wrappers) importeren deze
 nu rechtstreeks via het `services.*`-pad.
