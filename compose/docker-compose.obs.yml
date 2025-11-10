@@ -3,48 +3,60 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
+    networks: [obsnet]
     volumes:
       - /srv/trading/storage/prometheus:/prometheus
       - /srv/trading/compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports: ["9090:9090"]
-    networks: [obsnet]
 
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
+    networks: [obsnet]
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=Temp-Admin-123!
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - /srv/trading/storage/grafana:/var/lib/grafana
     ports: ["3000:3000"]
-    networks: [obsnet]
 
-  node_exporter:
+  nodeexporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
     networks: [obsnet]
+    command: ["--path.rootfs=/host"]
+    ports: ["9100:9100"]
+    volumes:
+      - /:/host:ro,rslave
 
   redis_exporter:
     image: oliver006/redis_exporter:latest
-    container_name: redis_exporter
-    hostname: redis_exporter
     restart: unless-stopped
+    networks: [obsnet]
     environment:
-      - REDIS_ADDR=redis://datastack-redis-1:6379
-    networks: [obsnet]
-    # ports: ["9121:9121"]
+      - REDIS_ADDR=redis://host.docker.internal:6379
+    ports: ["9121:9121"]
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
+  loki:
+    image: grafana/loki:2.9.8
     restart: unless-stopped
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
     networks: [obsnet]
+    command: ["-config.expand-env=true"]
+    environment:
+      - LOKI_STORAGE_PATH=/loki
+    volumes:
+      - /srv/trading/storage/loki:/loki
+    ports: ["3100:3100"]
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    restart: unless-stopped
+    networks: [obsnet]
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - /srv/trading/compose/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
 
 networks:
   obsnet: {}

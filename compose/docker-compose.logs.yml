@@ -1,0 +1,19 @@
+name: observability
+services:
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports: ["3100:3100"]
+
+  promtail:
+    image: grafana/promtail:latest
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro
+      - /srv/trading/compose/promtail-config.yml:/etc/promtail/config.yml:ro
+    depends_on: [loki]

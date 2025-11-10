@@ -1,0 +1,23 @@
+{
+  "uid": "logs-overview",
+  "title": "Logs Overview (Docker via Loki)",
+  "schemaVersion": 38,
+  "version": 1,
+  "timezone": "browser",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Container logs",
+      "gridPos": {"h": 15, "w": 24, "x": 0, "y": 0},
+      "options": { "showTime": true, "wrapLogMessage": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "Loki"},
+          "expr": "{job=\"docker\"}"
+        }
+      ]
+    }
+  ]
+}

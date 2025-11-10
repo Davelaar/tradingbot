@@ -1,0 +1,28 @@
+name: observability
+services:
+  node_exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    pid: host
+    network_mode: host
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    ports: ["8081:8080"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  redis_exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    ports: ["9121:9121"]
+    environment:
+      - REDIS_ADDR=redis://127.0.0.1:6379

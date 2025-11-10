@@ -1,0 +1,19 @@
+groups:
+  - name: base.rules
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          description: "Target {{ $labels.job }} on {{ $labels.instance }} is not reachable for 1m."
+      - alert: HighCPU
+        expr: avg by(instance) (rate(node_cpu_seconds_total{mode!="idle"}[5m])) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "Average CPU usage > 85% over 10m."
