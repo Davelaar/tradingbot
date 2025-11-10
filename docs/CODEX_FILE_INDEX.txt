@@ -1,0 +1,10 @@
+scripts/get_open_orders.py
+scripts/list_open_orders.py
+scripts/cache_markets.py
+scripts/trade_watcher_final.py
+scripts/helpers/orders.py
+ai/baseline_signals.py
+storage/markets_precision.json
+docs/services_blueprint_sync.md
+.env.trading (NIET committen; lokaal aanwezig)
+.env.bitvavo (NIET committen; lokaal aanwezig)
