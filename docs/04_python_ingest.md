@@ -152,3 +152,50 @@ cat > ~/STEP-4.4-ingest-run.md <<'MD'
 - files written: <paths>
 MD
 ```
+
+---
+
+## 4.5 Orderbook WS-ingest (venv)
+```bash
+sudo -u trader bash -lc '
+source /srv/trading/.venv/bin/activate
+export $(grep -v "^#" /srv/trading/.env.bitvavo | xargs -d "\n")
+python /srv/trading/ingest_orderbook.py
+'
+```
+**Validatie:**
+- Redis stream `bitvavo:book` groeit (`redis-cli xlen bitvavo:book`).
+- JSONL/Parquet-bestanden voor snapshots/updates/top-of-book verschijnen onder `/srv/trading/storage/parquet/<date>/orderbook/`.
+
+### Stap-afsluiting
+```bash
+cat > ~/STEP-4.5-orderbook.md <<'MD'
+# STEP 4.5 — Orderbook ingest
+- redis stream: bitvavo:book
+- parquet batches: orderbook/*
+MD
+```
+
+---
+
+## 4.6 Candles WS-ingest (venv)
+```bash
+sudo -u trader bash -lc '
+source /srv/trading/.venv/bin/activate
+export $(grep -v "^#" /srv/trading/.env.bitvavo | xargs -d "\n")
+python /srv/trading/ingest_candles.py
+'
+```
+**Validatie:**
+- Redis streams `bitvavo:candles:<interval>` groeien (controleer met `redis-cli xlen`).
+- Parquet- en JSONL-bestanden per interval/markt staan onder `/srv/trading/storage/parquet/<date>/candles/`.
+
+### Stap-afsluiting
+```bash
+cat > ~/STEP-4.6-candles.md <<'MD'
+# STEP 4.6 — Candles ingest
+- intervals: $CANDLE_INTERVALS
+- redis streams: bitvavo:candles:*
+MD
+```
+
